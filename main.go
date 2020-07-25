@@ -104,7 +104,6 @@ func ConvertToWebP(path string) (finished int) {
 }
 
 func convert(root_path string, exts []string, parallel_count int) {
-	wg := &sync.WaitGroup{}
 	parallel := parallel_count > 1
 
 	files, err := glob(root_path, exts)
@@ -112,8 +111,9 @@ func convert(root_path string, exts []string, parallel_count int) {
 		panic(err)
 	}
 
-	semaphore := make(chan int, parallel_count)
 	if parallel {
+		wg := &sync.WaitGroup{}
+		semaphore := make(chan int, parallel_count)
 		for _, file := range files {
 			wg.Add(1)
 			go func(file_path string) {
