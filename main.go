@@ -9,6 +9,8 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 
 	"golang.org/x/image/draw"
 
@@ -77,7 +79,7 @@ func ReadImage(path string) (img image.Image) {
 	}
 }
 
-func ConvertToWebP(path string) {
+func ConvertToWebP(path string) (finished int) {
 	dir_path, file_name := filepath.Split(path)
 	file_name_len := len(file_name) - len(filepath.Ext(file_name))
 	base_file_name := file_name[0:file_name_len]
@@ -98,18 +100,41 @@ func ConvertToWebP(path string) {
 	if err := webp.EncodeRGBA(w, img.(*image.RGBA), config); err != nil {
 		panic(err)
 	}
+	return 1
+}
+
+func convert(root_path string, exts []string, parallel_count int) {
+	wg := &sync.WaitGroup{}
+	parallel := parallel_count > 1
+
+	files, err := glob(root_path, exts)
+	if err != nil {
+		panic(err)
+	}
+
+	semaphore := make(chan int, parallel_count)
+	if parallel {
+		for _, file := range files {
+			wg.Add(1)
+			go func(file_path string) {
+				defer wg.Done()
+				semaphore <- 1
+				ConvertToWebP(file_path)
+				<-semaphore
+			}(file)
+		}
+		wg.Wait()
+	} else {
+		for _, file := range files {
+			ConvertToWebP(file)
+		}
+	}
 }
 
 func main() {
 	root := flag.String("root", ".", "Root path")
 	flag.Parse()
 	exts := []string{".jpg", ".png"}
-	files, err := glob(*root, exts)
 	fmt.Println("Path:" + *root)
-	if err != nil {
-		panic(err)
-	}
-	for _, file := range files {
-		ConvertToWebP(file)
-	}
+	convert(*root, exts, runtime.NumCPU())
 }
